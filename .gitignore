@@ -1,0 +1,7 @@
+.depend*
+*.core
+*.debug
+*.full
+*.o
+*~
+meltdown
