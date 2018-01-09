@@ -110,7 +110,6 @@ static uint8_t selftest[4096];
 static void
 init_probe(void)
 {
-	void *guard;
 
 	if (mmap(NULL, PROBE_SIZE, PROT_NONE, MAP_GUARD, -1, 0) == MAP_FAILED)
 		err(1, "mmap()");
@@ -132,6 +131,7 @@ static void
 calibrate(void)
 {
 	uint64_t meas, min, max, sum;
+	unsigned int i;
 
 	warnx("calibrating...");
 
@@ -139,7 +139,7 @@ calibrate(void)
 	min = UINT64_MAX;
 	max = 0;
 	sum = 0;
-	for (unsigned int i = 0; i < CAL_ROUNDS + 2; ++i) {
+	for (i = 0; i < CAL_ROUNDS + 2; ++i) {
 		clflush(probe);
 		meas = timed_read(probe);
 		if (meas < min)
@@ -158,7 +158,7 @@ calibrate(void)
 	min = UINT64_MAX;
 	max = 0;
 	sum = 0;
-	for (unsigned int i = 0; i < CAL_ROUNDS + 2; ++i) {
+	for (i = 0; i < CAL_ROUNDS + 2; ++i) {
 		meas = timed_read(probe);
 		if (meas < min)
 			min = meas;
@@ -272,8 +272,9 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	uintmax_t umax;
 	char *end;
+	uintmax_t umax;
+	unsigned int i;
 	int opt;
 
 	while ((opt = getopt(argc, argv, "a:n:s")) != -1)
@@ -299,10 +300,9 @@ main(int argc, char *argv[])
 				errx(1, "length is out of range");
 			break;
 		case 's':
-			if (addr != 0 || len != 0)
+			if (addr != 0)
 				usage();
 			addr = selftest;
-			len = 510;
 			break;
 		default:
 			usage();
@@ -319,9 +319,14 @@ main(int argc, char *argv[])
 		addr = DEFAULT_ADDR;
 	if (len == 0)
 		len = DEFAULT_LEN;
-	if (addr == selftest)
-		for (unsigned int i = 0; i < sizeof selftest; ++i)
-			selftest[i] = ~(uint8_t)(i % 255);
+
+	/* generate self-test data if required */
+	if (addr == selftest) {
+		for (i = 0; i < sizeof selftest; ++i)
+			selftest[i] = '!' + i % ('~' - '!' + 1);
+		if (len > sizeof selftest)
+			len = sizeof selftest;
+	}
 
 	/* create the probe array and ensure that it is paged in */
 	init_probe();
