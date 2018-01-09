@@ -157,14 +157,14 @@ calibrate(void)
  * Print a pretty hex dump of the specified buffer.
  */
 static void
-hexdump(const void *base, const uint8_t *buf, size_t len)
+hexdump(size_t base, const uint8_t *buf, size_t len)
 {
 	unsigned int i;
 	ssize_t res;
 
 	res = len;
 	while (res > 0) {
-		printf("%p |", base);
+		printf("%08zx ", base);
 		for (i = 0; i < 16; ++i) {
 			if (i == 8)
 				printf(" :");
@@ -173,16 +173,16 @@ hexdump(const void *base, const uint8_t *buf, size_t len)
 			else
 				printf(" --");
 		}
-		printf(" | ");
+		printf(" |");
 		for (i = 0; i < 16; ++i) {
 			if (i == 8)
-				printf(" : ");
+				printf(":");
 			if (i < res)
 				printf("%c", (buf[i] >= ' ' && buf[i] <= '~') ? buf[i] : '.');
 			else
 				printf("-");
 		}
-		printf(" |\n");
+		printf("|\n");
 		res -= 16;
 		buf += 16;
 	}
@@ -224,10 +224,10 @@ meltdown(void)
 			}
 		}
 		if (i % 16 == 15)
-			hexdump(addr + i - 15, line, 16);
+			hexdump(i - 15, line, 16);
 	}
 	if (i % 16 > 0)
-		hexdump(addr + i - i % 16, line, i % 16);
+		hexdump(i - i % 16, line, i % 16);
 	signal(SIGSEGV, sigsegv);
 }
 
