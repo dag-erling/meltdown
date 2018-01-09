@@ -131,6 +131,7 @@ init_probe(void)
 static void
 calibrate(void)
 {
+	uint8_t *addr;
 	uint64_t meas, min, max, sum;
 	unsigned int i;
 
@@ -140,9 +141,10 @@ calibrate(void)
 	min = UINT64_MAX;
 	max = 0;
 	sum = 0;
-	for (i = 0; i < CAL_ROUNDS + 2; ++i) {
-		clflush(probe);
-		meas = timed_read(probe);
+	for (i = 0, addr = probe; i < CAL_ROUNDS + 2; ++i) {
+		addr = probe + (i % PROBE_NLINES) * PROBE_LINELEN;
+		clflush(addr);
+		meas = timed_read(addr);
 		if (meas < min)
 			min = meas;
 		if (meas > max)
@@ -160,7 +162,8 @@ calibrate(void)
 	max = 0;
 	sum = 0;
 	for (i = 0; i < CAL_ROUNDS + 2; ++i) {
-		meas = timed_read(probe);
+		addr = probe + (i % PROBE_NLINES) * PROBE_LINELEN;
+		meas = timed_read(addr);
 		if (meas < min)
 			min = meas;
 		if (meas > max)
