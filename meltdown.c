@@ -173,13 +173,13 @@ calibrate(void)
 	avg_hot = sum / CAL_ROUNDS;
 	warnx("average hot read: %llu", (unsigned long long)avg_hot);
 
-	/* set decision threshold to the average of the two */
-	threshold = (avg_hot + avg_cold) / 2;
+	/* set decision threshold to sqrt(hot * cold) */
+	if (avg_hot >= avg_cold)
+		errx(1, "hot read is slower than cold read!");
+	for (threshold = avg_hot; threshold <= avg_cold; threshold++)
+		if (threshold * threshold >= avg_hot * avg_cold)
+			break;
 	warnx("threshold: %llu", (unsigned long long)threshold);
-
-	/* warn if the numbers are very close */
-	if ((avg_hot - avg_cold) * 10 < threshold)
-		warnx("warning: low delta between cold and hot read latency!");
 }
 
 /*
