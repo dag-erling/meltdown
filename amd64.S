@@ -131,11 +131,10 @@ spec_read:
 
 	/* attempt to read the target */
 1:	movb		(%rdi), %al
-	testq		%rax, %rax
+	shlq		%cl, %rax
 	jz		1b
 
 	/* access the appropriate probe */
-	shlq		%cl, %rax
-	movb		(%rax, %rsi, 1), %cl
+	movb		(%rsi, %rax, 1), %cl
 
 	ret
