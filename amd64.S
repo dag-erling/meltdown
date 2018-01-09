@@ -40,32 +40,6 @@ clflush:
 	ret
 
 /*
- * void rflush(const void *addr, size_t n, size_t step);
- *
- * entry:
- *      %rdi	addr
- *      %rsi	n
- *      %rdx	step
- * exit:
- *	-
- *
- * Flush a range from the cache.
- */
-.global rflush
-.type	rflush, @function
-rflush:
-	movq		%rsi, %rcx
-
-1:
-	clflush		(%rdi)
-
-	addq		%rdx, %rdi
-	dec		%rcx
-	jnz		1b
-
-	ret
-
-/*
  * uint64_t rdtsc64(void);
  *
  * entry:
