@@ -83,31 +83,18 @@ static uint64_t threshold;
  * Compute the average hot and cold read latency and derive the threshold.
  */
 #define N 1048576
-void
+static void
 calibrate(void)
 {
 	uint64_t avg_cold, avg_hot;
 	uint64_t meas, min, max, sum;
 
+	warnx("calibrating...");
+
+	/* compute average latency of "cold" access */
 	min = UINT64_MAX;
 	max = 0;
 	sum = 0;
-
-	/* compute average latency of "hot" access */
-	for (unsigned int i = 0; i < N + 2; ++i) {
-		meas = timeread(&probe);
-		if (meas < min)
-			min = meas;
-		if (meas > max)
-			max = meas;
-		sum += meas;
-	}
-	sum -= min;
-	sum -= max;
-	avg_hot = sum / N;
-	warnx("average hot read: %llu", (unsigned long long)avg_hot);
-
-	/* compute average latency of "cold" access */
 	for (unsigned int i = 0; i < N + 2; ++i) {
 		clflush(&probe);
 		meas = timeread(&probe);
@@ -121,6 +108,24 @@ calibrate(void)
 	sum -= max;
 	avg_cold = sum / N;
 	warnx("average cold read: %llu", (unsigned long long)avg_cold);
+
+	/* compute average latency of "hot" access */
+	meas = timeread(&probe);
+	min = UINT64_MAX;
+	max = 0;
+	sum = 0;
+	for (unsigned int i = 0; i < N + 2; ++i) {
+		meas = timeread(&probe);
+		if (meas < min)
+			min = meas;
+		if (meas > max)
+			max = meas;
+		sum += meas;
+	}
+	sum -= min;
+	sum -= max;
+	avg_hot = sum / N;
+	warnx("average hot read: %llu", (unsigned long long)avg_hot);
 
 	/* set threshold to the average of the two */
 	threshold = (avg_hot + avg_cold) / 2;
