@@ -113,7 +113,7 @@ static uint8_t selftest[4096];
  * that it is not adjacent to memory in use elsewhere in the program.
  */
 #ifndef MAP_GUARD
-#define MAP_GUARD	MAP_ANON
+#define MAP_GUARD	(MAP_ANON | MAP_PRIVATE)
 #endif
 static void
 init_probe(void)
