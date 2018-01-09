@@ -130,6 +130,7 @@ spec_read:
 	xor		%rax, %rax
 
 	/* attempt to read the target */
+	prefetcht0	(%rdi)
 1:	movb		(%rdi), %al
 	shlq		%cl, %rax
 	jz		1b
