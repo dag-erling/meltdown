@@ -69,7 +69,7 @@ static void
 usage(void)
 {
 
-	fprintf(stderr, "usage: meltdown [-v] [-a addr | -s] [-l len] [-n rounds]\n");
+	fprintf(stderr, "usage: mdattack [-v] [-a addr | -s] [-l len] [-n rounds]\n");
 	exit(1);
 }
 

@@ -1,6 +1,7 @@
-PROG	 = meltdown
-SRCS	 = main.c meltdown.c util.c
-SRCS	+= ${MACHINE_CPUARCH}.S
-MAN	 = #
+PROGS		 = mdattack
+SRCS.common	 = meltdown.c util.c
+SRCS.common	+= ${MACHINE_CPUARCH}.S
+SRCS.mdattack	 = mdattack.c ${SRCS.common}
+MAN		 = #
 
-.include <bsd.prog.mk>
+.include <bsd.progs.mk>
