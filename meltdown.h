@@ -43,7 +43,7 @@ extern int verbose;
 /*
  * Utilities
  */
-void hexdump(size_t, const uint8_t *, size_t);
+void hexdump(size_t, const void *, size_t);
 
 /*
  * Assembler functions
@@ -59,6 +59,6 @@ void spec_read(const uint8_t *, const uint8_t *, unsigned int);
  */
 void meltdown_init(void);
 void meltdown_calibrate(void);
-void meltdown_attack(const uint8_t *, size_t, unsigned int);
+void meltdown_attack(const void *, void *, size_t, unsigned int);
 
 #endif

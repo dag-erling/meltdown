@@ -43,8 +43,9 @@ int verbose;
  * Print a pretty hex dump of the specified buffer.
  */
 void
-hexdump(size_t base, const uint8_t *buf, size_t len)
+hexdump(size_t base, const void *bufp, size_t len)
 {
+	const uint8_t *buf = bufp;
 	unsigned int i;
 	ssize_t res;
 
@@ -71,5 +72,6 @@ hexdump(size_t base, const uint8_t *buf, size_t len)
 		printf("|\n");
 		res -= 16;
 		buf += 16;
+		base += 16;
 	}
 }

