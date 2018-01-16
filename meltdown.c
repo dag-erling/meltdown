@@ -28,12 +28,6 @@
  * SUCH DAMAGE.
  */
 
-/*
- * Demonstration of the Meltdown attack on FreeBSD
- *
- * https://meltdownattack.com/
- */
-
 #include <sys/mman.h>
 
 #include <err.h>
