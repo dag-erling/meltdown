@@ -34,6 +34,9 @@
 
 #include "meltdown.h"
 
+/*
+ * Debugging
+ */
 int verbose;
 
 /*

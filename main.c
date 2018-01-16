@@ -37,11 +37,6 @@
 #include "meltdown.h"
 
 /*
- * Debugging
- */
-int verbose;
-
-/*
  * Kernel base address for a few platforms
  */
 #if __amd64__
