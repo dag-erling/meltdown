@@ -46,21 +46,12 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "meltdown.h"
+
 /*
  * Debugging
  */
-static int verbose;
-#define VERBOSEF(...) do { if (verbose > 0) fprintf(stderr, __VA_ARGS__); } while (0)
-#define VERYVERBOSEF(...) do { if (verbose > 1) fprintf(stderr, __VA_ARGS__); } while (0)
-
-/*
- * Assembler functions
- */
-void clflush(const void *addr);
-uint64_t rdtsc64(void);
-uint32_t rdtsc32(void);
-uint64_t timed_read(const void *);
-void spec_read(const uint8_t *addr, const uint8_t *probe, unsigned int shift);
+int verbose;
 
 /*
  * Kernel base address for a few platforms
@@ -216,7 +207,7 @@ hexdump(size_t base, const uint8_t *buf, size_t len)
 			if (i == 8)
 				printf(":");
 			if (i < res)
-				printf("%c", (buf[i] >= ' ' && buf[i] <= '~') ? buf[i] : '.');
+				printf("%c", is_p(buf[i]) ? buf[i] : '.');
 			else
 				printf("-");
 		}
