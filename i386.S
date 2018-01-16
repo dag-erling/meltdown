@@ -31,35 +31,27 @@
 /*
  * void clflush(const void *addr);
  *
+ * entry:
+ *	(%esp + 4)	addr
+ * exit:
+ *	-
+ *
  * Flush an address from the cache.
  */
 .global clflush
 .type	clflush, @function
 clflush:
-	clflush		(%edi)
-	ret
-
-/*
- * void rflush(const void *addr, size_t n, size_t step);
- *
- * Flush a range from the cache.
- */
-.global rflush
-.type	rflush, @function
-rflush:
-	movq		%esi, %ecx
-
-rflush_loop:
-	clflush		(%edi)
-
-	addq		%edx, %edi
-	dec		%ecx
-	jnz		rflush_loop
-
+	mfence
+	clflush		(%esp + 4)
 	ret
 
 /*
  * uint64_t rdtsc64(void);
+ *
+ * entry:
+ *	-
+ * exit:
+ *	%edx:%eax	TSC value
  *
  * Read the 64-bit timestamp counter.
  */
@@ -73,26 +65,57 @@ rdtsc64:
 /*
  * uint32_t rdtsc32(void);
  *
+ * entry:
+ *	-
+ * exit:
+ *	%eax		lower 32 bits of TSC value
+ *
  * Read the 64-bit timestamp counter, but discard the upper half.
  */
 .global rdtsc32
 .type	rdtsc32, @function
 rdtsc32:
 	rdtsc
+	xor	%edx, %edx
 
 	ret
 
 /*
- * uint64_t timeread(const void *addr);
+ * uint64_t timed_read(const void *addr);
+ *
+ * entry:
+ *      (%esp + 4)	addr
+ * exit:
+ *      %edx:%eax	TSC delta
  *
  * Read a word from the specified address and return the time it took
  * in delta-TSC.  Will occasionally return a wildly inaccurate number
  * due to counter wraparound.
  */
-.global	timeread
-.type	timeread, @function
-timeread:
+.global	timed_read
+.type	timed_read, @function
+timed_read:
 	/* NOT IMPLEMENTED */
 	xor		%eax, %eax
 	xor		%edx, %edx
+
+	ret
+
+/*
+ * void spec_read(const uint8_t *addr, const uint8_t *probe, unsigned int shift);
+ *
+ * entry:
+ *      (%esp + 12)	addr
+ *      (%esp + 8)	probe
+ *      (%esp + 4)	shift
+ * exit:
+ *	-
+ *
+ * Read *addr repeatedly until it is non-zero, then read probe[*addr << shift].
+ */
+.global spec_read
+.type	spec_read, @function
+spec_read:
+	/* NOT IMPLEMENTED */
+
 	ret

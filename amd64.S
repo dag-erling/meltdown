@@ -33,6 +33,8 @@
  *
  * entry:
  *	%rdi		addr
+ * exit:
+ *	-
  *
  * Flush an address from the cache.
  */
