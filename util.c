@@ -28,37 +28,45 @@
  * SUCH DAMAGE.
  */
 
-#ifndef MELTDOWN_H_INCLUDED
-#define MELTDOWN_H_INCLUDED
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 
-#include "mdctype.h"
+#include "meltdown.h"
 
-/*
- * Debugging
- */
-extern int verbose;
-#define VERBOSEF(...) do { if (verbose > 0) fprintf(stderr, __VA_ARGS__); } while (0)
-#define VERYVERBOSEF(...) do { if (verbose > 1) fprintf(stderr, __VA_ARGS__); } while (0)
+int verbose;
 
 /*
- * Utilities
+ * Print a pretty hex dump of the specified buffer.
  */
-void hexdump(size_t, const uint8_t *, size_t);
+void
+hexdump(size_t base, const uint8_t *buf, size_t len)
+{
+	unsigned int i;
+	ssize_t res;
 
-/*
- * Assembler functions
- */
-void clflush(const void *);
-uint64_t rdtsc64(void);
-uint32_t rdtsc32(void);
-uint64_t timed_read(const void *);
-void spec_read(const uint8_t *, const uint8_t *, unsigned int);
-
-/*
- * Attack setup and execution
- */
-void meltdown_init(void);
-void meltdown_calibrate(void);
-void meltdown_attack(const uint8_t *, size_t, unsigned int);
-
-#endif
+	res = len;
+	while (res > 0) {
+		printf("%08zx ", base);
+		for (i = 0; i < 16; ++i) {
+			if (i == 8)
+				printf(" :");
+			if (i < res)
+				printf(" %02x", buf[i]);
+			else
+				printf(" --");
+		}
+		printf(" |");
+		for (i = 0; i < 16; ++i) {
+			if (i == 8)
+				printf(":");
+			if (i < res)
+				printf("%c", is_p(buf[i]) ? buf[i] : '.');
+			else
+				printf("-");
+		}
+		printf("|\n");
+		res -= 16;
+		buf += 16;
+	}
+}

