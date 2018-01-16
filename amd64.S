@@ -31,11 +31,15 @@
 /*
  * void clflush(const void *addr);
  *
+ * entry:
+ *	%rdi		addr
+ *
  * Flush an address from the cache.
  */
 .global clflush
 .type	clflush, @function
 clflush:
+	mfence
 	clflush		(%rdi)
 	ret
 
@@ -45,7 +49,7 @@ clflush:
  * entry:
  *	-
  * exit:
- *	%rax	TSC value
+ *	%rax		TSC value
  *
  * Read the 64-bit timestamp counter.
  */
@@ -64,7 +68,7 @@ rdtsc64:
  * entry:
  *	-
  * exit:
- *	%eax	lower 32 bits of TSC value
+ *	%eax		lower 32 bits of TSC value
  *
  * Read the 64-bit timestamp counter, but discard the upper half.
  */
@@ -79,9 +83,9 @@ rdtsc32:
  * uint64_t timed_read(const void *addr);
  *
  * entry:
- *      %rdi	addr
+ *      %rdi		addr
  * exit:
- *      %rax	TSC delta
+ *      %rax		TSC delta
  *
  * Read a word from the specified address and return the time it took
  * in delta-TSC.  Will occasionally return a wildly inaccurate number
@@ -115,9 +119,9 @@ timed_read:
  * void spec_read(const uint8_t *addr, const uint8_t *probe, unsigned int shift);
  *
  * entry:
- *      %rdi	addr
- *      %rsi	probe
- *      %rdx	shift
+ *      %rdi		addr
+ *      %rsi		probe
+ *      %rdx		shift
  * exit:
  *	-
  *
