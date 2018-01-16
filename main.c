@@ -34,16 +34,10 @@
  * https://meltdownattack.com/
  */
 
-#include <sys/mman.h>
-
 #include <err.h>
-#include <limits.h>
-#include <setjmp.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "meltdown.h"
