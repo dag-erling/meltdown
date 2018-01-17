@@ -88,7 +88,7 @@ mdcheck(void)
 		if (p.p_pid == pid) {
 			VERBOSEF("exact match at %u rounds\n", rounds);
 			return (0);
-		} else if (p.p_pid & (pidmask == pid)) {
+		} else if ((p.p_pid & pidmask) == pid) {
 			VERBOSEF("imperfect match at %u rounds\n", rounds);
 			ret = 1;
 		} else {
