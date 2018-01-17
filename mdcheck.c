@@ -48,8 +48,21 @@
 
 static int quick;
 
+typedef enum {
+	MDCHECK_SUCCESS,
+	MDCHECK_PARTIAL,
+	MDCHECK_FAILED,
+	MDCHECK_ERROR,
+} mdcheck_result;
+
+/*
+ * Attempts to exfiltrate data from the kernel.	 Returns MDCHECK_SUCCESS
+ * if completely successful, MDCHECK_PARTIAL if partially successful,
+ * MDCHECK_FAILED if unsuccessful, and MDCHECK_ERROR if an error prevented
+ * the test from running.
+ */
 #ifdef __FreeBSD__
-static int
+static mdcheck_result
 mdcheck(void)
 {
 	int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, 0 };
@@ -60,7 +73,7 @@ mdcheck(void)
 	int pid, pidmask;
 	int ret;
 
-	ret = -1;
+	ret = MDCHECK_FAILED;
 	pid = getpid();
 	pidmask = 0xffffffff;
 	for (i = 0; i < 4; ++i)
@@ -71,28 +84,41 @@ mdcheck(void)
 	mib[3] = pid;
 	kiplen = sizeof kip;
 	memset(&kip, 0, kiplen);
-	if (sysctl(mib, 4, &kip, &kiplen, NULL, 0) != 0)
-		err(1, "sysctl()");
-	for (rounds = 8; rounds <= 256; rounds *= 2) {
+	if (sysctl(mib, 4, &kip, &kiplen, NULL, 0) != 0) {
+		warn("sysctl()");
+		return (MDCHECK_ERROR);
+	}
+	for (ret = MDCHECK_FAILED, rounds = 8; rounds <= 512; rounds *= 2) {
 		memset(&p, 0, sizeof p);
 		if (quick) {
+			/* quick mode: read just the pid */
 			meltdown_attack(&kip.ki_paddr->p_pid, &p.p_pid,
-			    sizeof p.p_pid, rounds);	
+			    sizeof p.p_pid, rounds);
 			if (verbose)
 				hexdump(0, &p.p_pid, sizeof p.p_pid);
 		} else {
+			/* full mode: read our entire struct proc */
 			meltdown_attack(kip.ki_paddr, &p, sizeof p, rounds);
 			if (verbose)
 				hexdump(0, &p, sizeof p);
 		}
+		/*
+		 * Rate our success based on the Hamming distance between
+		 * what we got and what we expected.
+		 *
+		 * TODO: create a portable
+		 *   unsigned int hamming(const void *, const void *, size_t);
+		 * in util.c, and use pointers to deduplicate the quick
+		 * and slow code paths.
+		 */
 		if (p.p_pid == pid) {
 			VERBOSEF("exact match at %u rounds\n", rounds);
-			return (0);
+			return (MDCHECK_SUCCESS);
 		} else if ((p.p_pid & pidmask) == pid) {
 			VERBOSEF("imperfect match at %u rounds\n", rounds);
-			ret = 1;
+			ret = MDCHECK_PARTIAL;
 		} else {
-			VERBOSEF("no match at %u rounds (d = %u)\n",
+			VERBOSEF("no match with %u rounds (d = %u)\n",
 			    rounds, __builtin_popcount(p.p_pid ^ pid));
 		}
 	}
@@ -150,5 +176,5 @@ main(int argc, char *argv[])
 	/* perform our tests */
 	ret = mdcheck();
 
-	exit(ret < 0 ? 1 : 0);
+	exit(ret);
 }
